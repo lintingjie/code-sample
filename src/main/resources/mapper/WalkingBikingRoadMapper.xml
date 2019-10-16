@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.vanke.spider.dal.gis.dao.WalkingBikingRoadMapper">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="BaseResultMap" type="com.vanke.spider.dal.model.gis.WalkingBikingRoad">
+            <result column="gid" property="gid" />
+            <result column="name" property="name" />
+            <result column="line_len" property="lineLen" />
+            <result column="walk_distance" property="walkDistance" />
+            <result column="walk_duration" property="walkDuration" />
+            <result column="bike_distance" property="bikeDistance" />
+            <result column="bike_duration" property="bikeDuration" />
+            <result column="city" property="city" />
+    </resultMap>
+
+    <select id="selectRecords" resultType="com.vanke.spider.dal.model.gis.WalkingBikingRoad">
+        select * from walking_biking_road
+        <where>
+            del_flg = 1
+            <if test="gid != null and gid != ''">
+                and gid = #{gid}
+            </if>
+            <if test="name != null and name != ''">
+                and name = #{name}
+            </if>
+            <if test="lineLen != null and lineLen != ''">
+                and line_len = #{lineLen}
+            </if>
+            <if test="walkDistance != null and walkDistance != ''">
+                and walk_distance = #{walkDistance}
+            </if>
+            <if test="walkDuration != null and walkDuration != ''">
+                and walk_duration = #{walkDuration}
+            </if>
+            <if test="bikeDistance != null and bikeDistance != ''">
+                and bike_distance = #{bikeDistance}
+            </if>
+            <if test="bikeDuration != null and bikeDuration != ''">
+                and bike_duration = #{bikeDuration}
+            </if>
+            <if test="city != null and city != ''">
+                and city = #{city}
+            </if>
+            <if test="keyword != null and keyword != '' and fields.size() > 0 ">
+                and
+                <foreach collection="fields" close=")" open="(" index="index" item="item" separator="or">
+                ${item} like concat('%',#{keyword},'%')
+                </foreach>
+            </if>
+        </where>
+        <if test="orderBy != null and orderBy != ''">
+            order by ${orderBy}
+        </if>
+    </select>
+
+    <select id="getNearestVertice" resultType="com.vanke.spider.dal.model.gis.Vertice">
+        SELECT id,ST_X(the_geom) as lng, ST_Y(the_geom) as lat FROM walking_biking_road_vertices_pgr
+        ORDER BY the_geom &lt;-&gt; ST_GeometryFromText('POINT(${lng} ${lat})',4326)
+        LIMIT 1;
+    </select>
+
+    <select id="isPointInPolygon" resultType="Boolean">
+        SELECT ST_Intersects(
+            ST_GeographyFromText('SRID=4326;${polygon}'),
+            ST_GeographyFromText('SRID=4326;POINT(${lng} ${lat})')
+        );
+    </select>
+
+    <select id="getWalkingConcavehull" resultType="String">
+        SELECT st_astext(st_concavehull)
+        FROM st_concavehull(st_collect(array(
+            SELECT rd.geom
+            FROM pgr_drivingDistance (
+                'SELECT gid as id, source, target, walk_duration as cost FROM walking_biking_road
+                <where>
+                    <if test="city != null and city != ''">
+                        and city = ${city}::varchar
+                    </if>
+                </where>
+                ',
+                ${verticeId},
+                ${time},
+                FALSE
+                ) dd,
+                walking_biking_road as rd
+             WHERE rd.gid = dd.edge
+        )),0.7)
+    </select>
+
+    <select id="getBikingConcavehull" resultType="String">
+        SELECT st_astext(st_concavehull)
+        FROM  st_concavehull(st_collect(array(
+            SELECT rd.geom
+            FROM pgr_drivingDistance (
+                'SELECT gid as id, source, target, bike_duration as cost FROM walking_biking_road
+                <where>
+                    <if test="city != null and city != ''">
+                        and city = ${city}::varchar
+                    </if>
+                </where>
+                ',
+                ${verticeId},
+                ${time},
+                FALSE
+                ) dd,
+                walking_biking_road as rd
+            WHERE rd.gid = dd.edge
+        )),0.7)
+    </select>
+
+</mapper>

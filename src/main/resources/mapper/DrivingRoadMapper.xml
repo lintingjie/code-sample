@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.vanke.spider.dal.gis.dao.DrivingRoadMapper">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="BaseResultMap" type="com.vanke.spider.dal.model.gis.DrivingRoad">
+            <result column="gid" property="gid" />
+            <result column="name" property="name" />
+            <result column="mean_speed" property="meanSpeed" />
+            <result column="line_len" property="lineLen" />
+            <result column="distance" property="distance" />
+            <result column="duration" property="duration" />
+            <result column="traffic_light" property="trafficLight" />
+            <result column="city" property="city" />
+            <result column="workday" property="workday" />
+            <result column="time_quantum" property="timeQuantum" />
+    </resultMap>
+
+    <select id="selectRecords" resultType="com.vanke.spider.dal.model.gis.DrivingRoad">
+        select * from driving_road
+        <where>
+            del_flg = 1
+            <if test="gid != null and gid != ''">
+                and gid = #{gid}
+            </if>
+            <if test="name != null and name != ''">
+                and name = #{name}
+            </if>
+            <if test="meanSpeed != null and meanSpeed != ''">
+                and mean_speed = #{meanSpeed}
+            </if>
+            <if test="lineLen != null and lineLen != ''">
+                and line_len = #{lineLen}
+            </if>
+            <if test="distance != null and distance != ''">
+                and distance = #{distance}
+            </if>
+            <if test="duration != null and duration != ''">
+                and duration = #{duration}
+            </if>
+            <if test="trafficLight != null and trafficLight != ''">
+                and traffic_light = #{trafficLight}
+            </if>
+            <if test="city != null and city != ''">
+                and city = #{city}
+            </if>
+            <if test="workday != null and workday != ''">
+                and workday = #{workday}
+            </if>
+            <if test="timeQuantum != null and timeQuantum != ''">
+                and time_quantum = #{timeQuantum}
+            </if>
+            <if test="keyword != null and keyword != '' and fields.size() > 0 ">
+                and
+                <foreach collection="fields" close=")" open="(" index="index" item="item" separator="or">
+                ${item} like concat('%',#{keyword},'%')
+                </foreach>
+            </if>
+        </where>
+        <if test="orderBy != null and orderBy != ''">
+            order by ${orderBy}
+        </if>
+    </select>
+
+    <select id="getNearestVertice" resultType="com.vanke.spider.dal.model.gis.Vertice">
+        WITH nearest_point as(
+        SELECT * FROM driving_road
+        <where>
+            <if test="city != null and city != ''">
+                and city = #{city}
+            </if>
+            <if test="workday != null and workday != ''">
+                and workday = #{workday}
+            </if>
+            <if test="timeQuantum != null and timeQuantum != ''">
+                and time_quantum = #{timeQuantum}
+            </if>
+        </where>
+        order by geom &lt;-&gt; ST_GeometryFromText('POINT(${lng} ${lat})',4326) limit 1
+        )
+
+        SELECT id,ST_X(the_geom) as lng, ST_Y(the_geom) as lat from driving_road_vertices_pgr
+        WHERE id = (select source from nearest_point) or id = (select target from nearest_point)
+        ORDER BY the_geom &lt;-&gt; ST_GeometryFromText('POINT(${lng} ${lat})',4326) limit 1
+
+    </select>
+
+    <select id="getDrivingConcavehull" resultType="String">
+
+        SELECT st_astext(st_concavehull)
+        FROM st_concavehull(st_collect(array(
+            SELECT rd.geom
+            FROM pgr_drivingDistance (
+                'SELECT gid as id, source, target, distance/(mean_speed*0.28) as cost FROM driving_road
+                <where>
+                    <if test="city != null and city != ''">
+                        and city = ${city}::varchar
+                    </if>
+                    <if test="workday != null and workday != ''">
+                        and workday = ${workday}::varchar
+                    </if>
+                    <if test="timeQuantum != null and timeQuantum != ''">
+                        and time_quantum = ${timeQuantum}::varchar
+                    </if>
+                </where>
+                ',
+                ${verticeId},
+                ${time},
+                FALSE
+                ) dd,
+                driving_road as rd
+            WHERE rd.gid = dd.edge
+        )),0.7)
+
+    </select>
+
+    <select id="queryByPolygon" resultType="com.vanke.spider.dal.model.SpiderTrafficFacility">
+
+        select id,name,address,lat,lng,station_type from spider_traffic_facility
+        where st_contains(ST_GeomFromText(#{polygon},4326),geom)
+        <if test="polygonStrList != null and polygonStrList.size() > 0 ">
+            and
+            <foreach collection="polygonStrList" close=")" open="(" index="index" item="polygon" separator="or">
+                st_contains(ST_GeomFromText(#{polygon},4326),geom)
+            </foreach>
+        </if>
+        <!--<if test="tableCodeList!=null and tableCodeList.size>0">-->
+        <!--and  station_type in (-->
+        <!--<foreach collection="tableCodeList" close=")" open="(" index="index" separator="," item="item">-->
+        <!--#{item}-->
+        <!--</foreach>-->
+        <!--)-->
+        <!--</if>-->
+
+    </select>
+
+    <select id="queryByPolygonList" resultType="com.vanke.spider.dal.model.SpiderTrafficFacility">
+
+        select id,name,address,lat,lng,station_type from spider_traffic_facility
+        <where>
+            del_flg = 1 and station_type='BUS'
+            <if test="polygonStrList != null and polygonStrList.size() > 0 ">
+                and
+                <foreach collection="polygonStrList" close=")" open="(" index="index" item="polygon" separator="or">
+                    st_contains(ST_GeomFromText(#{polygon},4326),geom)
+                </foreach>
+            </if>
+            <!--<if test="tableCodeList!=null and tableCodeList.size>0">-->
+            <!--and  station_type in (-->
+            <!--<foreach collection="tableCodeList" separator="," item="item">-->
+            <!--#{item}-->
+            <!--</foreach>-->
+            <!--)-->
+            <!--</if>-->
+        </where>
+
+    </select>
+
+
+</mapper>

@@ -1,0 +1,316 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.vanke.spider.dal.es.dao.SpiderTrafficFacilityMapperEs">
+
+
+    <select id="queryList">
+        {
+        "_source": {
+            "includes": [
+                "station_id",
+                "name",
+                "lat",
+                "lng",
+                "address",
+                "station_type"
+            ],
+            "excludes": []
+        },
+        "size":100000,
+        "query": {
+            "bool": {
+                "must": [
+                <if test="city != null">
+                    {
+                    "term": {
+                    "city": "${city}"
+                    }
+                    },
+                </if>
+                <if test="tableCodeList!=null and tableCodeList.size>0">
+                    { "terms":{"station_type":[
+                    <foreach collection="tableCodeList" item="item" separator=",">
+                        "${item}"
+                    </foreach>
+                    ]}},
+                </if>
+                <if test="startTimeStr!=null and endTimeStr!=''">
+                    {
+                    "range": {
+                        "create_time": {
+                            "gte": "${startTimeStr}",
+                            "lte": "${endTimeStr}",
+                            "format": "yyyy-MM-dd HH:mm:ss"
+                            }
+                        }
+                    },
+                </if>
+                    {
+                        "term": {
+                             "del_flg": "1"
+                        }
+                    }
+                ],
+                "filter": {
+                    <if test="lat != null and lng != null and coverageRadius != null">
+                        "geo_distance": {
+                            "distance": "${coverageRadius}m",
+                            "location": {
+                                "lat": ${lat},
+                                "lon": ${lng}
+                            }
+                        }
+                    </if>
+                    <if test="pois!=null and pois.size>0">
+                        "geo_polygon":{"location":{"points":[
+                        <foreach collection="pois" item="item" separator=",">
+                            {"lat" : ${item.lat},"lon" : ${item.lng}}
+                        </foreach>
+                        ]}}
+                    </if>
+                    <if test="poisList !=null and poisList.size>0">
+                        "bool": {
+                        "should": [
+                        <foreach collection="poisList" item="poi" separator=",">
+                            {"geo_polygon":{"location":{"points":[
+                            <foreach collection="poi" item="item" separator=",">
+                                {"lat" : ${item.lat},"lon" : ${item.lng}}
+                            </foreach>
+                            ]}}}
+                        </foreach>
+
+                        ]}
+                    </if>
+                }
+
+            }
+        },
+        "collapse": {
+            "field": "station_id"
+        },
+        "sort": [
+            {
+                "create_time": {
+                    "order": "desc"
+                }
+            }
+        ]
+        }
+    </select>
+
+    <select id="queryCount">
+        {
+        "_source": {
+            "includes": [
+                "station_id",
+                "name",
+                "lat",
+                "lng",
+                "station_type"
+            ],
+        "excludes": []
+        },
+        "query": {
+            "bool": {
+                "must": [
+                    <if test="city != null">
+                        {
+                        "term": {
+                        "city": "${city}"
+                        }
+                        },
+                    </if>
+                    <if test="tableCodeList!=null and tableCodeList.size>0">
+                        { "terms":{"station_type":[
+                        <foreach collection="tableCodeList" item="item" separator=",">
+                            "${item}"
+                        </foreach>
+                        ]}},
+                    </if>
+                    <if test="startTimeStr!=null and endTimeStr!=''">
+                        {
+                        "range": {
+                        "create_time": {
+                        "gte": "${startTimeStr}",
+                        "lte": "${endTimeStr}",
+                        "format": "yyyy-MM-dd HH:mm:ss"
+                        }
+                        }
+                        },
+                    </if>
+                    {
+                        "term": {
+                            "del_flg": "1"
+                        }
+                    }
+                ],
+                "filter": {
+                <if test="lat != null and lng != null and coverageRadius != null">
+                    "geo_distance": {
+                        "distance": "${coverageRadius}m",
+                        "location": {
+                            "lat": ${lat},
+                            "lon": ${lng}
+                        }
+                    }
+                </if>
+                <if test="pois!=null and pois.size>0">
+                    "geo_polygon":{"location":{"points":[
+                    <foreach collection="pois" item="item" separator=",">
+                        {"lat" : ${item.lat},"lon" : ${item.lng}}
+                    </foreach>
+                    ]}}
+                </if>
+                <if test="poisList !=null and poisList.size>0">
+                    "bool": {
+                    "should": [
+                    <foreach collection="poisList" item="poi" separator=",">
+                        {"geo_polygon":{"location":{"points":[
+                        <foreach collection="poi" item="item" separator=",">
+                            {"lat" : ${item.lat},"lon" : ${item.lng}}
+                        </foreach>
+                        ]}}}
+                    </foreach>
+                    ]}
+                </if>
+                }
+
+            }
+        },
+        "aggs": {
+            "station_type": {
+                "terms": {
+                    "field": "station_type"
+                },
+                "aggs": {
+                    "count": {
+                        "cardinality": {
+                            "field": "station_id"
+                        }
+                    }
+                }
+            }
+        }
+    }
+    </select>
+
+    <select id="queryPage">
+        {
+        "_source": {
+            "includes": [
+                "station_id",
+                "name",
+                "lat",
+                "lng",
+                "address",
+                "station_type"
+            ],
+            "excludes": []
+        },
+        <if test="pageNo != null and pageSize != null">
+            "from": ${(pageNo-1)*pageSize},
+        </if>
+        <if test="pageSize != null">
+            "size": ${pageSize},
+        </if>
+        "query": {
+        "bool": {
+        "must": [
+        <if test="city != null">
+            {
+                "term": {
+                    "city": "${city}"
+                }
+            },
+        </if>
+        <if test="stationType != null">
+            {
+                "term": {
+                    "station_type": "${stationType}"
+                }
+            },
+        </if>
+        <if test="startTimeStr!=null and endTimeStr!=''">
+            {
+                "range": {
+                    "create_time": {
+                        "gte": "${startTimeStr}",
+                        "lte": "${endTimeStr}",
+                        "format": "yyyy-MM-dd HH:mm:ss"
+                    }
+                }
+            },
+        </if>
+            {
+                "term": {
+                    "del_flg": "1"
+                }
+            }
+        ],
+        "filter": {
+        <if test="lat != null and lng != null and coverageRadius != null">
+            "geo_distance": {
+                "distance": "${coverageRadius}m",
+                "location": {
+                    "lat": ${lat},
+                    "lon": ${lng}
+                }
+            }
+        </if>
+        <if test="pois!=null and pois.size>0">
+            "geo_polygon":{"location":{"points":[
+            <foreach collection="pois" item="item" separator=",">
+                {"lat" : ${item.lat},"lon" : ${item.lng}}
+            </foreach>
+            ]}}
+        </if>
+        <if test="poisList !=null and poisList.size>0">
+            "bool": {
+            "should": [
+            <foreach collection="poisList" item="poi" separator=",">
+                {"geo_polygon":{"location":{"points":[
+                <foreach collection="poi" item="item" separator=",">
+                    {"lat" : ${item.lat},"lon" : ${item.lng}}
+                </foreach>
+                ]}}}
+            </foreach>
+
+            ]}
+        </if>
+        }
+
+        }
+        },
+
+        "collapse": {
+            "field": "station_id"
+        },
+        "sort": [
+            {
+                "_geo_distance": {
+                    "location": {
+                        "lat": ${lat},
+                        "lon": ${lng}
+                    },
+                    "unit": "km",
+                    "order": "asc"
+                }
+            },
+            {
+                "create_time": {
+                    "order": "desc"
+                }
+            }
+        ],
+        "aggs": {
+            "count": {
+                "cardinality": {
+                    "field": "station_id"
+                }
+            }
+        }
+
+        }
+    </select>
+
+</mapper>

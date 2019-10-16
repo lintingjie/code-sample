@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.vanke.spider.dal.gis.dao.TrafficFacilityMapperGis">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="BaseResultMap" type="com.vanke.spider.dal.model.SpiderTrafficFacility">
+            <result column="station_id" property="stationId" />
+            <result column="name" property="name" />
+            <result column="project_type" property="projectType" />
+            <result column="province" property="province" />
+            <result column="city" property="city" />
+            <result column="county" property="county" />
+            <result column="lat" property="lat" />
+            <result column="lng" property="lng" />
+            <result column="address" property="address" />
+            <result column="start_time" property="startTime" />
+            <result column="brief" property="brief" />
+            <result column="state" property="state" />
+            <result column="road_name" property="roadName" />
+            <result column="foot_point" property="footPoint" />
+            <result column="error_identification" property="errorIdentification" />
+            <result column="station_type" property="stationType" />
+            <!--<result column="geom" jdbcType="OTHER" property="geom" typeHandler="com.vanke.spider.dal.config.GeometryTypeHandler"/>-->
+    </resultMap>
+
+    <!--<resultMap id="geomResultMap" type="org.postgis.Geometry">-->
+        <!--<result column="geom" typeHandler="com.vanke.spider.dal.config.GeometryTypeHandler"/>-->
+    <!--</resultMap>-->
+
+    <select id="selectRecords" resultType="com.vanke.spider.dal.model.SpiderTrafficFacility">
+        select * from spider_traffic_facility
+        <where>
+            del_flg = 1
+            <if test="stationId != null and stationId != ''">
+                and station_id = #{stationId}
+            </if>
+            <if test="name != null and name != ''">
+                and name = #{name}
+            </if>
+            <if test="projectType != null and projectType != ''">
+                and project_type = #{projectType}
+            </if>
+            <if test="province != null and province != ''">
+                and province = #{province}
+            </if>
+            <if test="city != null and city != ''">
+                and city = #{city}
+            </if>
+            <if test="county != null and county != ''">
+                and county = #{county}
+            </if>
+            <if test="lat != null and lat != ''">
+                and lat = #{lat}
+            </if>
+            <if test="lng != null and lng != ''">
+                and lng = #{lng}
+            </if>
+            <if test="address != null and address != ''">
+                and address = #{address}
+            </if>
+            <if test="startTime != null and startTime != ''">
+                and start_time = #{startTime}
+            </if>
+            <if test="brief != null and brief != ''">
+                and brief = #{brief}
+            </if>
+            <if test="state != null and state != ''">
+                and state = #{state}
+            </if>
+            <if test="roadName != null and roadName != ''">
+                and road_name = #{roadName}
+            </if>
+            <if test="footPoint != null and footPoint != ''">
+                and foot_point = #{footPoint}
+            </if>
+            <if test="errorIdentification != null and errorIdentification != ''">
+                and error_identification = #{errorIdentification}
+            </if>
+            <if test="stationType != null and stationType != ''">
+                and station_type = #{stationType}
+            </if>
+            <if test="keyword != null and keyword != '' and fields.size() > 0 ">
+                and
+                <foreach collection="fields" close=")" open="(" index="index" item="item" separator="or">
+                ${item} like concat('%',#{keyword},'%')
+                </foreach>
+            </if>
+        </where>
+        <if test="orderBy != null and orderBy != ''">
+            order by ${orderBy}
+        </if>
+    </select>
+
+    <!--<select id="getNearestVertice" resultType="Integer">-->
+         <!--SELECT id FROM shenzhen_bike2_vertices_pgr-->
+             <!--ORDER BY the_geom &lt;-&gt; ST_GeometryFromText('POINT(${lng} ${lat})',4326)-->
+             <!--LIMIT 1;-->
+    <!--</select>-->
+
+    <select id="getNearestVertice" resultType="com.vanke.spider.dal.model.gis.Vertice">
+        WITH nearest_point as(
+            SELECT * FROM driving_road
+            <where>
+                <if test="city != null and city != ''">
+                    and city = #{city}
+                </if>
+                <if test="workday != null and workday != ''">
+                    and workday = #{workday}
+                </if>
+                <if test="timeQuantum != null and timeQuantum != ''">
+                    and time_quantum = #{timeQuantum}
+                </if>
+            </where>
+            order by geom &lt;-&gt; ST_GeometryFromText('POINT(${lng} ${lat})',4326) limit 1
+        )
+
+        SELECT id,ST_X(the_geom) as lng, ST_Y(the_geom) as lat from driving_road_vertices_pgr
+        WHERE id = (select source from nearest_point) or id = (select target from nearest_point)
+        ORDER BY the_geom &lt;-&gt; ST_GeometryFromText('POINT(${lng} ${lat})',4326) limit 1
+
+    </select>
+
+    <select id="getDrivingDistance" resultType="String">
+
+        SELECT st_astext(st_concavehull) from  st_concavehull(st_collect(array(
+            SELECT
+                rd.geom
+            FROM
+                pgr_drivingDistance (
+                    'SELECT gid as id, source, target, line_len/(mean_speed*1000/3600)+traffic_li::integer*44 as cost FROM driving_road
+                    <where>
+                        <if test="city != null and city != ''">
+                            and city = ${city}::varchar
+                        </if>
+                        <if test="workday != null and workday != ''">
+                            and workday = ${workday}::varchar
+                        </if>
+                        <if test="timeQuantum != null and timeQuantum != ''">
+                            and time_quantum = ${timeQuantum}::varchar
+                        </if>
+                    </where>
+                    ',
+                    ${verticeId},
+                    ${time}*60,
+                    FALSE
+                ) dd,
+                driving_road as rd
+            WHERE rd.gid = dd.edge
+        )),0.7)
+
+    </select>
+
+    <select id="queryByPolygon" resultType="com.vanke.spider.dal.model.SpiderTrafficFacility">
+
+        select id,name,address,lat,lng,station_type from spider_traffic_facility
+        where st_contains(ST_GeomFromText(#{polygon},4326),geom)
+        <!--<if test="tableCodeList!=null and tableCodeList.size>0">-->
+            <!--and  station_type in (-->
+            <!--<foreach collection="tableCodeList" close=")" open="(" index="index" separator="," item="item">-->
+                <!--#{item}-->
+            <!--</foreach>-->
+            <!--)-->
+        <!--</if>-->
+
+    </select>
+
+    <select id="queryByPolygonList" resultType="com.vanke.spider.dal.model.SpiderTrafficFacility">
+
+        select id,name,address,lat,lng,station_type from spider_traffic_facility
+        <where>
+            del_flg = 1 and station_type='BUS'
+            <if test="polygonStrList != null and polygonStrList.size() > 0 ">
+                and
+                <foreach collection="polygonStrList" close=")" open="(" index="index" item="polygon" separator="or">
+                    st_contains(ST_GeomFromText(#{polygon},4326),geom)
+                </foreach>
+            </if>
+            <!--<if test="tableCodeList!=null and tableCodeList.size>0">-->
+                <!--and  station_type in (-->
+                <!--<foreach collection="tableCodeList" separator="," item="item">-->
+                    <!--#{item}-->
+                <!--</foreach>-->
+                <!--)-->
+            <!--</if>-->
+        </where>
+
+    </select>
+
+
+</mapper>
